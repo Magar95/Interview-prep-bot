@@ -1,4 +1,11 @@
 from fastapi import FastAPI
+from pydantic import BaseModel
+
+
+class QuestionCreate(BaseModel):
+    topic: str
+    text: str
+
 
 app = FastAPI(
     title="Interview Prep Bot",
@@ -32,3 +39,26 @@ def get_questions(topic: str = None, limit: int = 10):  # query-параметр
         db = [q for q in db if q["topic"] == topic]
 
     return db[:limit]
+
+
+@app.get("/questions/{question_id}/answers")
+def get_answers(question_id: int, limit: int = 5):
+    return {
+        'question_id': question_id,
+        'limit': limit,
+        'answers': []
+    }
+
+
+@app.post("/questions", status_code=201)
+def create_question(question: QuestionCreate):
+    db = questions
+    new_id = max(i['id'] for i in db) + 1
+    new_question = {
+        'id': new_id,
+        'topic': question.topic,
+        'text': question.text
+    }
+    db.append(new_question)
+    return new_question
+
