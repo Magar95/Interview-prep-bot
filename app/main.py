@@ -62,3 +62,18 @@ def create_question(question: QuestionCreate):
     db.append(new_question)
     return new_question
 
+
+@app.delete('/questions/{question_id}', status_code=204)
+def delete_question(question_id: int):
+    db = questions
+    for q in db:
+        if q['id'] == question_id:
+            db.remove(q)
+            return {}
+    return {'error': 'Question not found'}
+
+
+@app.get("/topics")
+def get_topics():
+    return {'list_topics': list(set(q["topic"] for q in questions))}
+
