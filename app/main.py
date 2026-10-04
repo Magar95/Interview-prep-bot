@@ -1,10 +1,6 @@
 from fastapi import FastAPI
-from pydantic import BaseModel
 
-
-class QuestionCreate(BaseModel):
-    topic: str
-    text: str
+from app.schemas import QuestionCreate, QuestionResponse
 
 
 app = FastAPI(
@@ -15,14 +11,14 @@ app = FastAPI(
 
 # Имитация базы данных (пока без БД)
 questions = [
-    {"id": 1, "topic": "python", "text": "Что такое GIL?"},
-    {"id": 2, "topic": "python", "text": "Чем list отличается от tuple?"},
-    {"id": 3, "topic": "sql", "text": "Что такое индекс?"},
-    {"id": 4, "topic": "fastapi", "text": "Что такое Dependency Injection?"},
+    {"id": 1, "topic": "python", "text": "Что такое GIL?", "difficulty": 3},
+    {"id": 2, "topic": "python", "text": "Чем list отличается от tuple?", "difficulty": 2},
+    {"id": 3, "topic": "sql", "text": "Что такое индекс?", "difficulty": 2},
+    {"id": 4, "topic": "fastapi", "text": "Что такое Dependency Injection?", "difficulty": 4},
 ]
 
 
-@app.get("/questions/{question_id}")
+@app.get("/questions/{question_id}", response_model=QuestionResponse)
 def get_question(question_id: int):  # path-параметр
     db = questions
     for q in db:
@@ -31,7 +27,7 @@ def get_question(question_id: int):  # path-параметр
     return {"error": "Question not found"}
 
 
-@app.get("/questions")
+@app.get("/questions", response_model=list[QuestionResponse])
 def get_questions(topic: str = None, limit: int = 10):  # query-параметры
     db = questions
 
@@ -50,16 +46,18 @@ def get_answers(question_id: int, limit: int = 5):
     }
 
 
-@app.post("/questions", status_code=201)
+@app.post("/questions", status_code=201, response_model=QuestionResponse)
 def create_question(question: QuestionCreate):
     db = questions
     new_id = max(i['id'] for i in db) + 1
     new_question = {
         'id': new_id,
         'topic': question.topic,
-        'text': question.text
+        'text': question.text,
+        'difficulty': question.difficulty,
     }
     db.append(new_question)
+    print(db)
     return new_question
 
 
