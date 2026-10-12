@@ -32,6 +32,12 @@ class AnswerBase(BaseModel):
     text: str = Field(..., min_length=1, max_length=500)
 
 
+class AnswerCreate(AnswerBase):
+    """Схема для создания ответа."""
+
+    pass
+
+
 class AnswerResponse(AnswerBase):
     """В каком виде пользователь получит ответ от сайта."""
 
@@ -59,3 +65,10 @@ class QuestionWithAnswers(QuestionCreate):
     topic: str
     text: str
     answers: list[AnswerBase] = []
+
+
+class EvaluationResponse(BaseModel):
+    '''Схема оценки AI на ответ'''
+
+    answer_id: int
+    evaluation: dict

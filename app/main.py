@@ -1,6 +1,16 @@
-from fastapi import FastAPI
+import asyncio
+from datetime import datetime
 
-from app.schemas import QuestionCreate, QuestionResponse
+from fastapi import FastAPI, HTTPException
+
+from app.ai_client import evaluate_answer
+from app.schemas import (QuestionCreate, 
+                         QuestionResponse,
+                         AnswerCreate, 
+                         AnswerResponse,
+                         QuestionShort, 
+                         QuestionFull,
+                         EvaluationResponse)
 
 
 app = FastAPI(
@@ -17,9 +27,11 @@ questions = [
     {"id": 4, "topic": "fastapi", "text": "Что такое Dependency Injection?", "difficulty": 4},
 ]
 
+answers = []
+
 
 @app.get("/questions/{question_id}", response_model=QuestionResponse)
-def get_question(question_id: int):  # path-параметр
+async def get_question(question_id: int):  # path-параметр
     db = questions
     for q in db:
         if q["id"] == question_id:
@@ -28,7 +40,7 @@ def get_question(question_id: int):  # path-параметр
 
 
 @app.get("/questions", response_model=list[QuestionResponse])
-def get_questions(topic: str = None, limit: int = 10):  # query-параметры
+async def get_questions(topic: str = None, limit: int = 10):  # query-параметры
     db = questions
 
     if topic:
@@ -38,7 +50,7 @@ def get_questions(topic: str = None, limit: int = 10):  # query-параметр
 
 
 @app.get("/questions/{question_id}/answers")
-def get_answers(question_id: int, limit: int = 5):
+async def get_answers(question_id: int, limit: int = 5):
     return {
         'question_id': question_id,
         'limit': limit,
@@ -47,7 +59,7 @@ def get_answers(question_id: int, limit: int = 5):
 
 
 @app.post("/questions", status_code=201, response_model=QuestionResponse)
-def create_question(question: QuestionCreate):
+async def create_question(question: QuestionCreate):
     db = questions
     new_id = max(i['id'] for i in db) + 1
     new_question = {
@@ -62,7 +74,7 @@ def create_question(question: QuestionCreate):
 
 
 @app.delete('/questions/{question_id}', status_code=204)
-def delete_question(question_id: int):
+async def delete_question(question_id: int):
     db = questions
     for q in db:
         if q['id'] == question_id:
@@ -72,6 +84,35 @@ def delete_question(question_id: int):
 
 
 @app.get("/topics")
-def get_topics():
+async def get_topics():
     return {'list_topics': list(set(q["topic"] for q in questions))}
 
+
+@app.post("/questions/{question_id}/evaluate", response_model=EvaluationResponse)
+async def evaluate_user_answer(question_id: int, answer: AnswerCreate):
+    """
+    Принимает ответ пользователя и отправляет его на оценку AI.
+    """
+    # 1. Находим вопрос
+    question = next((q for q in questions if q["id"] == question_id), None)
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+    
+    # 2. Отправляем ответ на оценку AI (асинхронно)
+    evaluation = await evaluate_answer(question["text"], answer.text)
+    
+    # 3. Сохраняем ответ
+    new_id = len(answers) + 1
+    new_answer = {
+        "id": new_id,
+        "question_id": question_id,
+        "text": answer.text,
+        "created_at": datetime.now(),
+        "evaluation": evaluation
+    }
+    answers.append(new_answer)
+    
+    return {
+        "answer_id": new_id,
+        "evaluation": evaluation
+    }
