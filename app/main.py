@@ -4,7 +4,7 @@ from datetime import datetime
 from fastapi import FastAPI, HTTPException, Depends
 
 from app.ai_client import evaluate_answer
-from app.dependencies import get_ai_client
+from app.dependencies import get_ai_client, get_current_user
 from app.schemas import (QuestionCreate, 
                          QuestionResponse,
                          AnswerCreate, 
@@ -62,10 +62,10 @@ async def get_answers(question_id: int, limit: int = 5):
 @app.post("/questions", status_code=201, response_model=QuestionResponse)
 async def create_question(
     question: QuestionCreate,
-    # current_user: dict = Depends(get_current_user),  # ← защита
+    current_user: dict = Depends(get_current_user),  # ← защита
 ):
     """Создать вопрос. Только для авторизованных пользователей."""
-    
+
     db = questions
     new_id = max(i['id'] for i in db) + 1
     new_question = {
