@@ -1,9 +1,10 @@
 import asyncio
 from datetime import datetime
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 
 from app.ai_client import evaluate_answer
+from app.dependencies import get_ai_client
 from app.schemas import (QuestionCreate, 
                          QuestionResponse,
                          AnswerCreate, 
@@ -59,7 +60,12 @@ async def get_answers(question_id: int, limit: int = 5):
 
 
 @app.post("/questions", status_code=201, response_model=QuestionResponse)
-async def create_question(question: QuestionCreate):
+async def create_question(
+    question: QuestionCreate,
+    # current_user: dict = Depends(get_current_user),  # ← защита
+):
+    """Создать вопрос. Только для авторизованных пользователей."""
+    
     db = questions
     new_id = max(i['id'] for i in db) + 1
     new_question = {
@@ -69,7 +75,6 @@ async def create_question(question: QuestionCreate):
         'difficulty': question.difficulty,
     }
     db.append(new_question)
-    print(db)
     return new_question
 
 
@@ -89,7 +94,9 @@ async def get_topics():
 
 
 @app.post("/questions/{question_id}/evaluate", response_model=EvaluationResponse)
-async def evaluate_user_answer(question_id: int, answer: AnswerCreate):
+async def evaluate_user_answer(question_id: int, 
+                               answer: AnswerCreate,
+                               ai_client=Depends(get_ai_client),):
     """
     Принимает ответ пользователя и отправляет его на оценку AI.
     """
@@ -99,7 +106,7 @@ async def evaluate_user_answer(question_id: int, answer: AnswerCreate):
         raise HTTPException(status_code=404, detail="Question not found")
     
     # 2. Отправляем ответ на оценку AI (асинхронно)
-    evaluation = await evaluate_answer(question["text"], answer.text)
+    evaluation = await ai_client(question["text"], answer.text)
     
     # 3. Сохраняем ответ
     new_id = len(answers) + 1
@@ -116,3 +123,11 @@ async def evaluate_user_answer(question_id: int, answer: AnswerCreate):
         "answer_id": new_id,
         "evaluation": evaluation
     }
+
+
+@app.get("/me")
+async def get_me(current_user: dict = Depends(get_current_user)):
+    """
+    Защищённая ручка: возвращает текущего пользователя.
+    """
+    return current_user
