@@ -1,17 +1,22 @@
 import asyncio
 from datetime import datetime
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import crud
+from app.database import get_db
 from app.ai_client import evaluate_answer
 from app.dependencies import get_ai_client, get_current_user
 from app.schemas import (QuestionCreate, 
                          QuestionResponse,
                          AnswerCreate, 
-                         AnswerResponse,
-                         QuestionShort, 
-                         QuestionFull,
+                         QuestionCreate,
+                         QuestionResponse,
+                         UserInToken,
                          EvaluationResponse)
+from app.services.ai_client import AIClient
 
 
 app = FastAPI(
@@ -20,34 +25,27 @@ app = FastAPI(
     version="0.1.0"
 )
 
-# Имитация базы данных (пока без БД)
-questions = [
-    {"id": 1, "topic": "python", "text": "Что такое GIL?", "difficulty": 3},
-    {"id": 2, "topic": "python", "text": "Чем list отличается от tuple?", "difficulty": 2},
-    {"id": 3, "topic": "sql", "text": "Что такое индекс?", "difficulty": 2},
-    {"id": 4, "topic": "fastapi", "text": "Что такое Dependency Injection?", "difficulty": 4},
-]
-
-answers = []
-
 
 @app.get("/questions/{question_id}", response_model=QuestionResponse)
-async def get_question(question_id: int):  # path-параметр
-    db = questions
-    for q in db:
-        if q["id"] == question_id:
-            return q
-    return {"error": "Question not found"}
+async def get_question(
+    question_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    question = await crud.get_question(db, question_id)
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+    return question
 
 
 @app.get("/questions", response_model=list[QuestionResponse])
-async def get_questions(topic: str = None, limit: int = 10):  # query-параметры
-    db = questions
-
-    if topic:
-        db = [q for q in db if q["topic"] == topic]
-
-    return db[:limit]
+async def get_questions_endpoint(
+    topic: Optional[str] = None, 
+    skip: int = 0,
+    limit: int = 10,
+    db: AsyncSession = Depends(get_db),
+) -> list[QuestionResponse]:
+    """Получить список вопросов."""
+    return await crud.get_questions(db, topic=topic, skip=skip, limit=limit)
 
 
 @app.get("/questions/{question_id}/answers")
