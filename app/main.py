@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud
 from app.database import get_db
-from app.ai_client import evaluate_answer
+from app.services.ai_client import evaluate_answer
 from app.dependencies import get_ai_client, get_current_user
 from app.schemas import (QuestionCreate, 
                          QuestionResponse,
@@ -27,7 +27,7 @@ app = FastAPI(
 
 
 @app.get("/questions/{question_id}", response_model=QuestionResponse)
-async def get_question(
+async def get_question_endpoint(
     question_id: int,
     db: AsyncSession = Depends(get_db),
 ):
@@ -60,20 +60,11 @@ async def get_answers(question_id: int, limit: int = 5):
 @app.post("/questions", status_code=201, response_model=QuestionResponse)
 async def create_question(
     question: QuestionCreate,
-    current_user: dict = Depends(get_current_user),  # ← защита
+    db: AsyncSession = Depends(get_db),
+    current_user: UserInToken = Depends(get_current_user),
 ):
     """Создать вопрос. Только для авторизованных пользователей."""
-
-    db = questions
-    new_id = max(i['id'] for i in db) + 1
-    new_question = {
-        'id': new_id,
-        'topic': question.topic,
-        'text': question.text,
-        'difficulty': question.difficulty,
-    }
-    db.append(new_question)
-    return new_question
+    return await crud.create_question(db, question)
 
 
 @app.delete('/questions/{question_id}', status_code=204)
@@ -86,41 +77,21 @@ async def delete_question(question_id: int):
     return {'error': 'Question not found'}
 
 
+@app.delete("/questions/{question_id}", status_code=204)
+async def delete_question_endpoint(
+    question_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserInToken = Depends(get_current_user),
+) -> None:
+    """Удалить вопрос. Только для авторизованных."""
+    deleted = await crud.delete_question(db, question_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+
 @app.get("/topics")
 async def get_topics():
     return {'list_topics': list(set(q["topic"] for q in questions))}
-
-
-@app.post("/questions/{question_id}/evaluate", response_model=EvaluationResponse)
-async def evaluate_user_answer(question_id: int, 
-                               answer: AnswerCreate,
-                               ai_client=Depends(get_ai_client),):
-    """
-    Принимает ответ пользователя и отправляет его на оценку AI.
-    """
-    # 1. Находим вопрос
-    question = next((q for q in questions if q["id"] == question_id), None)
-    if not question:
-        raise HTTPException(status_code=404, detail="Question not found")
-    
-    # 2. Отправляем ответ на оценку AI (асинхронно)
-    evaluation = await ai_client(question["text"], answer.text)
-    
-    # 3. Сохраняем ответ
-    new_id = len(answers) + 1
-    new_answer = {
-        "id": new_id,
-        "question_id": question_id,
-        "text": answer.text,
-        "created_at": datetime.now(),
-        "evaluation": evaluation
-    }
-    answers.append(new_answer)
-    
-    return {
-        "answer_id": new_id,
-        "evaluation": evaluation
-    }
 
 
 @app.get("/me")
@@ -129,3 +100,28 @@ async def get_me(current_user: dict = Depends(get_current_user)):
     Защищённая ручка: возвращает текущего пользователя.
     """
     return current_user
+
+
+@app.post(
+    "/questions/{question_id}/evaluate",
+    response_model=EvaluationResponse,
+)
+async def evaluate_user_answer_endpoint(
+    question_id: int,
+    answer: AnswerCreate,
+    db: AsyncSession = Depends(get_db),
+    ai_client: AIClient = Depends(get_ai_client),
+    current_user: UserInToken = Depends(get_current_user),
+) -> EvaluationResponse:
+    """Принимает ответ и отправляет на оценку AI."""
+    question = await crud.get_question(db, question_id)
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+    
+    evaluation = await evaluate_answer(question.text, answer.text)
+    
+    db_answer = await crud.create_answer(
+        db, answer, question_id, current_user.id, evaluation,
+    )
+    
+    return EvaluationResponse(answer_id=db_answer.id, evaluation=evaluation)

@@ -1,6 +1,6 @@
 from fastapi import Header, HTTPException
 
-from app.ai_client import evaluate_answer
+from app.services.ai_client import evaluate_answer
 
 
 async def get_current_user(authorization: str = Header(None)):

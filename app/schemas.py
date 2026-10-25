@@ -59,6 +59,8 @@ class QuestionFull(QuestionBase):
     answers: list[AnswerResponse] = []
     created_at: datetime = Field(datetime.now())
 
+    model_config = ConfigDict(from_attributes=True)
+
 
 class QuestionWithAnswers(QuestionCreate):
     id: int
@@ -72,3 +74,10 @@ class EvaluationResponse(BaseModel):
 
     answer_id: int
     evaluation: dict
+
+
+class UserInToken(BaseModel):
+    """Пользователь, извлечённый из токена."""
+    id: int
+    username: str
+    
