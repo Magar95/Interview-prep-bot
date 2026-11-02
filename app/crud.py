@@ -4,7 +4,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Answer, Question, User
-from app.schemas import AnswerCreate, QuestionCreate
+from app.schemas import AnswerCreate, QuestionCreate, UserCreate
+from app.core.security import hash_password, verify_password
+
 
 # QUESTIONS
 async def get_questions(
@@ -74,3 +76,63 @@ async def create_answer(
     await db.commit()
     await db.refresh(db_answer)
     return db_answer
+
+
+async def get_user_by_id(
+    db: AsyncSession,
+    id: int,
+) -> User | None:
+    """Найти пользователя по username."""
+    stmt = select(User).filter_by(id=id)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def get_user_by_username(
+    db: AsyncSession,
+    username: str,
+) -> User | None:
+    """Найти пользователя по username."""
+    stmt = select(User).filter_by(username=username)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def get_user_by_email(
+    db: AsyncSession,
+    email: str,
+) -> User | None:
+    """Найти пользователя по email."""
+    stmt = select(User).filter_by(email=email)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def create_user(
+    db: AsyncSession,
+    user: UserCreate,
+) -> User:
+    """Создать пользователя с хешированным паролем."""
+    db_user = User(
+        username=user.username,
+        email=user.email,
+        hashed_password=hash_password(user.password),
+    )
+    db.add(db_user)
+    await db.commit()
+    await db.refresh(db_user)
+    return db_user
+
+
+async def authenticate_user(
+    db: AsyncSession,
+    username: str,
+    password: str,
+) -> User | None:
+    """Проверить логин и пароль."""
+    user = await get_user_by_username(db, username)
+    if not user:
+        return None
+    if not verify_password(password, user.hashed_password):
+        return None
+    return user

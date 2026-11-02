@@ -1,6 +1,7 @@
 import asyncio
 from datetime import datetime
 from typing import Optional
+from typing import Annotated
 
 from fastapi import FastAPI, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,8 +16,12 @@ from app.schemas import (QuestionCreate,
                          QuestionCreate,
                          QuestionResponse,
                          UserInToken,
-                         EvaluationResponse)
-from app.services.ai_client import AIClient
+                         EvaluationResponse,
+                         UserResponse)
+from routers.auth import router as auth_router
+from app.models import User
+
+# from app.services.ai_client import AIClient
 
 
 app = FastAPI(
@@ -24,6 +29,8 @@ app = FastAPI(
     description="AI помощник для подготовки к техническим собеседованиям",
     version="0.1.0"
 )
+
+app.include_router(auth_router)
 
 
 @app.get("/questions/{question_id}", response_model=QuestionResponse)
@@ -57,13 +64,13 @@ async def get_answers(question_id: int, limit: int = 5):
     }
 
 
-@app.post("/questions", status_code=201, response_model=QuestionResponse)
-async def create_question(
+@app.post("/questions", response_model=QuestionResponse, status_code=201)
+async def create_question_endpoint(
     question: QuestionCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: UserInToken = Depends(get_current_user),
-):
-    """Создать вопрос. Только для авторизованных пользователей."""
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> QuestionResponse:
+    """Создать вопрос. Только для авторизованных."""
     return await crud.create_question(db, question)
 
 
@@ -95,7 +102,7 @@ async def get_topics():
 
 
 @app.get("/me")
-async def get_me(current_user: dict = Depends(get_current_user)):
+async def get_me(current_user: Annotated[User, Depends(get_current_user)]):
     """
     Защищённая ручка: возвращает текущего пользователя.
     """
@@ -110,7 +117,7 @@ async def evaluate_user_answer_endpoint(
     question_id: int,
     answer: AnswerCreate,
     db: AsyncSession = Depends(get_db),
-    ai_client: AIClient = Depends(get_ai_client),
+    # ai_client: AIClient = Depends(get_ai_client),
     current_user: UserInToken = Depends(get_current_user),
 ) -> EvaluationResponse:
     """Принимает ответ и отправляет на оценку AI."""

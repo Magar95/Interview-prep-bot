@@ -1,25 +1,53 @@
-from fastapi import Header, HTTPException
+from typing import Annotated
 
-from app.services.ai_client import evaluate_answer
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app import crud
+from app.core.security import decode_access_token
+from app.database import get_db
+from app.models import User
+# from app.services.ai_client import AIClient
 
 
-async def get_current_user(authorization: str = Header(None)):
+# OAuth2 схема: извлекает токен из заголовка Authorization: Bearer ...
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+
+
+# async def get_ai_client() -> AIClient:
+#     """Возвращает клиент для работы с LLM."""
+#     return AIClient()
+
+
+async def get_current_user(
+    token: Annotated[str, Depends(oauth2_scheme)],
+    db: AsyncSession = Depends(get_db),
+) -> User:
     """
     Зависимость для получения текущего пользователя.
     
-    Пока это заглушка: проверяем наличие заголовка Authorization.
+    Проверяет JWT-токен и возвращает пользователя из БД.
     """
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
     
-    # Заглушка: возвращаем фиктивного пользователя
-    return {"id": 1, "username": "demo_user"}
-
-
-async def get_ai_client():
-    """
-    Зависимость для AI-клиента.
+    # 1. Декодируем токен
+    payload = decode_access_token(token)
+    if payload is None:
+        raise credentials_exception
     
-    Пока возвращает функцию-заглушку.
-    """
-    return evaluate_answer
+    # 2. Извлекаем user_id из sub
+    user_id: str | None = payload.get("sub")
+    if user_id is None:
+        raise credentials_exception
+    
+    # 3. Ищем пользователя в БД
+    user = await crud.get_user_by_id(db, int(user_id))
+    if user is None:
+        raise credentials_exception
+    
+    return user
