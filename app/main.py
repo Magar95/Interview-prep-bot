@@ -18,7 +18,7 @@ from app.schemas import (QuestionCreate,
                          UserInToken,
                          EvaluationResponse,
                          UserResponse)
-from routers.auth import router as auth_router
+from app.routers.auth import router as auth_router
 from app.models import User
 
 # from app.services.ai_client import AIClient

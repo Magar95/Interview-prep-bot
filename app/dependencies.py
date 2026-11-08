@@ -15,9 +15,10 @@ from app.models import User
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
-# async def get_ai_client() -> AIClient:
-#     """Возвращает клиент для работы с LLM."""
-#     return AIClient()
+async def get_ai_client():  # -> AIClient
+    """Возвращает клиент для работы с LLM."""
+    # return AIClient()
+    pass
 
 
 async def get_current_user(
