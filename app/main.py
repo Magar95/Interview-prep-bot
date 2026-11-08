@@ -1,15 +1,17 @@
 import asyncio
+import logging
 from datetime import datetime
 from typing import Optional
 from typing import Annotated
 
 from fastapi import FastAPI, HTTPException, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud
 from app.database import get_db
 from app.services.ai_client import evaluate_answer
-from app.dependencies import get_ai_client, get_current_user
+from app.dependencies import get_ai_client, get_current_user, require_role
 from app.schemas import (QuestionCreate, 
                          QuestionResponse,
                          AnswerCreate, 
@@ -20,14 +22,35 @@ from app.schemas import (QuestionCreate,
                          UserResponse)
 from app.routers.auth import router as auth_router
 from app.models import User
+from app.middleware import log_requests
 
 # from app.services.ai_client import AIClient
+
+
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
 
 app = FastAPI(
     title="Interview Prep Bot",
     description="AI помощник для подготовки к техническим собеседованиям",
     version="0.1.0"
+)
+
+app.middleware('http')(log_requests)
+
+# Настраиваем CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",  # React dev
+        "http://localhost:5173",  # Vite dev
+        "http://localhost:8080",  # альтернативный порт
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["X-Process-Time"],  # чтобы фронтенд видел заголовок
 )
 
 app.include_router(auth_router)
@@ -91,6 +114,21 @@ async def delete_question_endpoint(
     current_user: UserInToken = Depends(get_current_user),
 ) -> None:
     """Удалить вопрос. Только для авторизованных."""
+    deleted = await crud.delete_question(db, question_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+
+@app.delete(
+    "/questions/{question_id}",
+    status_code=204,
+    dependencies=[Depends(require_role("admin"))],
+)
+async def delete_question_endpoint(
+    question_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Удалить вопрос. Только для админов."""
     deleted = await crud.delete_question(db, question_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Question not found")

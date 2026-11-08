@@ -52,3 +52,25 @@ async def get_current_user(
         raise credentials_exception
     
     return user
+
+
+def require_role(role: str):
+    """
+    Фабрика зависимостей для проверки роли.
+    
+    Использование:
+        @router.get("/admin", dependencies=[Depends(require_role("admin"))])
+    """
+    async def check_role(
+        current_user: Annotated[User, Depends(get_current_user)],
+    ) -> User:
+        if current_user.role != role:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Role '{role}' required",
+            )
+        return current_user
+    
+    return check_role
+
+

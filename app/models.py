@@ -19,6 +19,8 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
 
+    role: Mapped[str] = mapped_column(String(20), default="user") 
+
     # Связь с ответами
     answers: Mapped[list["Answer"]] = relationship(back_populates="user")
 
